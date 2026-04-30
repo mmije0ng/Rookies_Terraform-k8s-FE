@@ -8,6 +8,11 @@ function App() {
 
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
+  const buildHttpError = async (response: Response, fallbackMessage: string) => {
+    const detail = await response.text().catch(() => "");
+    return new Error(detail ? `${fallbackMessage}: ${response.status} - ${detail}` : `${fallbackMessage}: ${response.status}`);
+  };
+
   const callBackend = async () => {
     setMessage("호출 중...");
     setError(null);
@@ -16,7 +21,7 @@ function App() {
       const response = await fetch(`${apiBaseUrl}/api/hello`);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw await buildHttpError(response, "HTTP error");
       }
 
       const data = await response.text();
@@ -50,7 +55,7 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed! status: ${response.status}`);
+        throw await buildHttpError(response, "Upload failed");
       }
 
       const result = await response.text();
