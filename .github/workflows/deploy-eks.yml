@@ -51,6 +51,10 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --name   ${{ secrets.EKS_CLUSTER_NAME }}
 
+      - name: Create namespace if not exists
+        run: |
+          kubectl get namespace sample-app || kubectl create namespace sample-app
+
       - name: Deploy to EKS
         env:
           FRONTEND_IMAGE: "${{ secrets.ECR_FRONTEND_URI }}:${{ github.sha }}"
