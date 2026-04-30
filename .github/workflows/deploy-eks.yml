@@ -1,0 +1,69 @@
+name: Frontend → EKS Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# ──────────────────────────────────────────────────────────────────────────
+# 이 repo의 GitHub Secrets에 등록할 값:
+#   AWS_ACCESS_KEY_ID          IAM 액세스 키
+#   AWS_SECRET_ACCESS_KEY      IAM 시크릿 키
+#   ECR_FRONTEND_URI           terraform output -raw ecr_frontend_repository_url
+#   EKS_CLUSTER_NAME           terraform output -raw eks_cluster_name
+# ──────────────────────────────────────────────────────────────────────────
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  deploy:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker Build & Push
+        env:
+          ECR: ${{ secrets.ECR_FRONTEND_URI }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR:$TAG \
+            -t $ECR:latest .
+          docker push $ECR:$TAG
+          docker push $ECR:latest
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name   ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Deploy to EKS
+        env:
+          FRONTEND_IMAGE: "${{ secrets.ECR_FRONTEND_URI }}:${{ github.sha }}"
+        run: |
+          envsubst < k8s/frontend.yaml | kubectl apply -f -
+
+      - name: Wait for Rollout
+        run: |
+          kubectl rollout status deployment/frontend \
+            -n sample-app --timeout=300s
+
+      - name: Show Access URL
+        run: |
+          echo "접속 URL:"
+          kubectl get svc frontend-service -n sample-app \
+            -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}{"\n"}'
