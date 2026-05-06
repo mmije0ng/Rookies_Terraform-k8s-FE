@@ -75,7 +75,7 @@ function App() {
   return (
     <div style={pageStyle}>
       <header style={headerStyle}>
-        <h1 style={titleStyle}>AWS S3 File Integration CI/CD Test</h1>
+        <h1 style={titleStyle}>AWS S3 File Integration CI/CD Test!</h1>
         <p style={descriptionStyle}>
           백엔드를 통해 S3에 파일을 업로드하고 미리볼 수 있습니다!
         </p>
