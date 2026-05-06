@@ -9,6 +9,7 @@ on:
 #   AWS_ACCESS_KEY_ID
 #   AWS_SECRET_ACCESS_KEY
 #   ECR_FRONTEND_URI
+#   EKS_CLUSTER_NAME
 #   ARGOCD_GIT_TOKEN
 
 
@@ -70,3 +71,13 @@ jobs:
           else
             echo "No changes to commit"
           fi
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name   ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Apply ArgoCD Application
+        run: |
+          kubectl apply -f infra-repo/argocd/frontend-application.yml
