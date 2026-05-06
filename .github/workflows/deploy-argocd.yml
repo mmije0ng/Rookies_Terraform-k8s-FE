@@ -1,0 +1,72 @@
+name: Frontend → ArgoCD Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   ECR_FRONTEND_URI
+#   ARGOCD_GIT_TOKEN
+
+
+env:
+  AWS_REGION: us-west-1
+
+jobs:
+  deploy:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker Build & Push
+        id: build-image
+        env:
+          ECR: ${{ secrets.ECR_FRONTEND_URI }}
+          TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$ECR:$TAG"
+          docker build -t "$IMAGE" -t "$ECR:latest" .
+          docker push "$IMAGE"
+          docker push "$ECR:latest"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Infra Repository
+        uses: actions/checkout@v4
+        with:
+          repository: mmije0ng/Rookies_Terraform-k8s-infra
+          token: ${{ secrets.ARGOCD_GIT_TOKEN }}
+          path: infra-repo
+
+      - name: Update Manifest
+        run: |
+          cd infra-repo
+          sed -i "s|image: .*|image: ${{ steps.build-image.outputs.image }}|g" manifests/frontend/frontend.yaml
+
+      - name: Commit and Push Changes
+        run: |
+          cd infra-repo
+          git config user.name "github-actions"
+          git config user.email "action@github.com"
+          git add manifests/frontend/frontend.yaml
+
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update frontend image to ${{ github.sha }} [skip ci]"
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi
